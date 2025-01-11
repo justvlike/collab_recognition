@@ -15,28 +15,17 @@ random.seed(42)
 np.random.seed(42)
 tf.random.set_seed(42)
 
-def load_audio_and_convert_to_spectrogram(audio_file, n_mels=128, augment=False):
+
+def load_audio_and_convert_to_spectrogram(audio_file, n_mels=128):
     # Загружаем аудио через librosa
     y, sr = librosa.load(audio_file, sr=None)  # Load with original sampling rate
-
-    # Аугментация данных (изменение скорости и высоты)
-    if augment:
-        if np.random.rand() < 0.5:
-            y = librosa.effects.time_stretch(y, rate=np.random.uniform(0.8, 1.2))  # Изменение скорости
-        if np.random.rand() < 0.5:
-            n_steps = np.random.randint(-5, 5)  # Случайное количество шагов для изменения тона
-            y = librosa.effects.pitch_shift(y, sr=sr, n_steps=n_steps)  # Изменение тона, передаем правильно
-
     # Создаем Mel-spectrogram
     spectrogram = librosa.feature.melspectrogram(y=y, sr=sr, n_mels=n_mels)
-
     # Переводим в log scale для лучшего представления
     log_spectrogram = librosa.power_to_db(spectrogram, ref=np.max)
-
-    # Возвращаем спектрограмму
     return log_spectrogram
 
-def prepare_training_data(training_path, n_mels=128, augment=False):
+def prepare_training_data(training_path, n_mels=128):
     X = []  # Features (spectrograms)
     y = []  # Labels (instrument classes)
 
@@ -50,23 +39,19 @@ def prepare_training_data(training_path, n_mels=128, augment=False):
     for instrument, label in instrument_map.items():
         folder_path = os.path.join(training_path, instrument)
         for audio_file in glob.glob(os.path.join(folder_path, '*.wav')):
-            spectrogram = load_audio_and_convert_to_spectrogram(audio_file, n_mels=n_mels, augment=augment)
+            spectrogram = load_audio_and_convert_to_spectrogram(audio_file, n_mels=n_mels)
             X.append(spectrogram)
             y.append(label)
 
-    # Возвращаем массивы данных и меток
     return np.array(X), np.array(y)
 
 # Подготовка данных, вызов функции преобразования
 dataset_path = "E:\\Files\\PycharmProjects\\collab_recognition\\files"
 training_path = os.path.join(dataset_path, 'IRMAS-TrainingData')
-
-# Подготовка обучающих данных с аугментацией
-X, y = prepare_training_data(training_path, augment=True)
-
+X, y = prepare_training_data(training_path)
 print(f"Data prepared: {X.shape}, Labels: {y.shape}")
 
-# Нормализация спектрограмм к областям [0, 1]
+# Нормализация спектрограмм к облатстям [0, 1]
 X = X / np.max(X)
 
 # Разделим данные (80% на обучение, 20% на проверку)
@@ -105,7 +90,7 @@ def build_model(input_shape, num_classes):
         layers.Dropout(0.5),
         layers.Dense(num_classes, activation='softmax')
     ])
-    optimizer = Adam(learning_rate=0.0001)  # Уменьшаем learning rate для стабильности
+    optimizer = Adam(learning_rate=0.0001)  # Уменьшите learning rate для стабильности
     model.compile(optimizer=optimizer, loss='categorical_crossentropy', metrics=['accuracy'])
     return model
 
@@ -123,9 +108,13 @@ model.summary()
 history = model.fit(
     X_train, y_train,
     validation_data=(X_val, y_val),
-    epochs=10,  # Увеличиваем количество эпох для лучшего обучения
+    epochs=10,  # Больше проходов - сильнее обучение
     batch_size=32
 )
+X_train_small = X_train[:500]
+y_train_small = y_train[:500]
+model.fit(X_train_small, y_train_small, validation_data=(X_val, y_val), epochs=5, batch_size=32)
+
 
 # График точности
 plt.plot(history.history['accuracy'], label='Train Accuracy')
@@ -163,7 +152,7 @@ instrument_map_inv = {v: k for k, v in instrument_map.items()}
 
 # Загружаем тестовый файл
 test_audio_file = 'E:\\Files\\PycharmProjects\\collab_recognition\\files\\IRMAS-TrainingData\\gel\\001__[gel][dru][pop_roc]0829__1.wav'
-test_spectrogram = load_audio_and_convert_to_spectrogram(test_audio_file, augment=False)
+test_spectrogram = load_audio_and_convert_to_spectrogram(test_audio_file)
 test_spectrogram = test_spectrogram / np.max(test_spectrogram)  # Нормализуем
 test_spectrogram = test_spectrogram[np.newaxis, ..., np.newaxis]
 
@@ -176,6 +165,7 @@ print(f"X_val min: {X_val.min()}, max: {X_val.max()}, shape: {X_val.shape}")
 
 print(f"y_train shape: {y_train.shape}, unique values: {np.unique(y_train)}")
 print(f"y_val shape: {y_val.shape}, unique values: {np.unique(y_val)}")
-
 from tensorflow.python.client import device_lib
 print(device_lib.list_local_devices())
+
+
